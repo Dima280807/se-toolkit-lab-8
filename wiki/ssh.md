@@ -8,16 +8,9 @@
   - [`SSH` private key](#ssh-private-key)
 - [`SSH` daemon](#ssh-daemon)
 - [`ssh-agent`](#ssh-agent)
-- [Login](#login)
-  - [Login without password](#login-without-password)
-  - [Login with password](#login-with-password)
 - [`SSH` shell](#ssh-shell)
   - [Check whether you run an `SSH` shell](#check-whether-you-run-an-ssh-shell)
 - [`scp`](#scp)
-- [Troubleshooting](#troubleshooting)
-  - [`Permission denied (publickey)`](#permission-denied-publickey)
-  - [`Bad owner or permissions`](#bad-owner-or-permissions)
-  - [`Connection timed out`](#connection-timed-out)
 
 ## What is `SSH`
 
@@ -68,39 +61,6 @@ When `ssh-agent` holds your key, you do not need to type a passphrase every time
 
 See [Start the `ssh-agent`](./vm-access.md#start-the-ssh-agent) for setup instructions.
 
-## Login
-
-`SSH` supports two authentication methods: [key-based](#login-without-password) (no password prompt) and [password-based](#login-with-password).
-
-### Login without password
-
-Key-based authentication uses your private key to prove your identity. The remote host checks whether the matching public key is listed as authorized.
-
-This is the recommended method and is what [Set up `SSH`](./vm-access.md#set-up-ssh) configures.
-
-1. [Set up `SSH`](./vm-access.md#set-up-ssh).
-2. Ensure your public key is added to the remote host.
-3. [Connect to the VM](./vm-access.md#connect-to-the-vm).
-
-You will not be asked for a password.
-
-### Login with password
-
-Password-based authentication asks you to type the remote user's password.
-
-> [!NOTE]
-> Password authentication may be disabled on the VM. Use [key-based authentication](#login-without-password) instead.
-
-1. To connect with a password,
-
-   [run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
-
-   ```terminal
-   ssh -o PasswordAuthentication=yes root@<your-vm-ip-address>
-   ```
-
-2. Type the VM's root password when prompted.
-
 ## `SSH` shell
 
 An `SSH` shell is the interactive [shell](./shell.md#what-is-a-shell) session you get after [connecting to the VM](./vm-access.md#connect-to-the-vm) over `SSH`.
@@ -135,62 +95,3 @@ scp -r <local-path> <user>@<host>:<remote-path>
 ```
 
 The `-r` flag copies directories recursively.
-
-## Troubleshooting
-
-<!-- no toc -->
-- [`Permission denied (publickey)`](#permission-denied-publickey)
-- [`Bad owner or permissions`](#bad-owner-or-permissions)
-- [`Connection timed out`](#connection-timed-out)
-
-### `Permission denied (publickey)`
-
-1. Check `IdentityFile` in `~/.ssh/config`.
-2. Ensure the public key was added to the remote host.
-3. Ensure your key is loaded: `ssh-add -l`.
-
-### `Bad owner or permissions`
-
-1. To fix the permissions,
-
-   [run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
-
-   ```terminal
-   chmod 700 ~/.ssh
-   chmod 600 ~/.ssh/se_toolkit_key
-   chmod 644 ~/.ssh/se_toolkit_key.pub
-   ```
-
-### `Connection timed out`
-
-1. Verify host IP and network connectivity.
-2. Verify the VM is running.
-3. To ping the VM,
-
-   [run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
-
-   ```terminal
-   ping <your-vm-ip-address>
-   ```
-
-   You should see logs like these:
-
-   ```terminal
-   PING 192.0.2.1 (192.0.2.1) 56(84) bytes of data.
-
-   64 bytes from 192.0.2.1: icmp_seq=1 ttl=61 time=2.15 ms
-   64 bytes from 192.0.2.1: icmp_seq=2 ttl=61 time=0.996 ms
-   64 bytes from 192.0.2.1: icmp_seq=3 ttl=61 time=1.08 ms
-   
-   ...
-   ```
-
-4. To enable verbose logs for debugging,
-
-   [run in the `VS Code Terminal`](./vs-code.md#run-a-command-in-the-vs-code-terminal):
-
-   ```terminal
-   ssh -v se-toolkit-vm
-   ```
-
-5. Try to stop, delete, and create a new VM if there are still problems.
