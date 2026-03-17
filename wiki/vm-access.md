@@ -242,12 +242,10 @@ Complete these steps:
 4. After a successful login, you should see the [shell prompt](./shell.md#shell-prompt):
 
    ```terminal
-   <user>@<your-vm-name>:~#
+   root@<your-vm-name>:~#
    ```
 
    > 🟦 **Note**
-   >
-   > [`<user>`](./operating-system.md#user-placeholder) is the same as you specified when [adding the VM to the `SSH` config (LOCAL)](#add-the-vm-to-the-ssh-config-local).
    >
    > [`<your-vm-name>`](./vm.md#your-vm-name-placeholder) is the same as you specified when [creating the VM](./vm.md#create-a-vm).
 
