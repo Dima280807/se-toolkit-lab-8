@@ -25,6 +25,9 @@
   - [7.4 Feature Flags for Optional Endpoints](#74-feature-flags-for-optional-endpoints)
   - [7.5 Async Database Access](#75-async-database-access)
   - [7.6 OBER-Compatible Data Schema](#76-ober-compatible-data-schema)
+  - [7.7 AI Agent — Standalone WebSocket Relay](#77-ai-agent--standalone-websocket-relay)
+  - [7.8 Structured Message Protocol](#78-structured-message-protocol)
+  - [7.9 Per-User Authentication via WebSocket Query Parameter](#79-per-user-authentication-via-websocket-query-parameter)
 
 ---
 
@@ -123,7 +126,7 @@ classDiagram
 
 ## 4. Container Diagram
 
-The system is deployed as four Docker containers, orchestrated by Docker Compose. The React frontend is compiled into static files and served by Caddy.
+The system is deployed as seven Docker containers, orchestrated by Docker Compose. The React and Flutter frontends are compiled into static files and served by Caddy. The nanobot AI agent exposes a WebSocket endpoint that both the Flutter web app and the Telegram bot connect to.
 
 ```mermaid
 graph TD
@@ -132,29 +135,37 @@ graph TD
     Developer([Developer])
 
     subgraph "Learning Management System — Docker Compose"
-        CADDY["Caddy\n[Reverse Proxy + Static Server]\nServes frontend, proxies API\nHost port :42002"]
+        CADDY["Caddy\n[Reverse Proxy + Static Server]\nServes frontends, proxies API\nHost port :42002"]
         API["FastAPI\n[Python, SQLModel, Uvicorn]\nREST API with Swagger UI\nContainer port :8000\nHost port :42001"]
         DB[("PostgreSQL\n[Relational Database]\nStores items, learners,\nand interactions\nHost port :42004")]
         PGA["pgAdmin\n[Web UI]\nDatabase management\nHost port :42003"]
+        NANOBOT["Nanobot\n[Python, nanobot-ai]\nAI agent gateway\nWebSocket :8765\nHTTP :18790"]
+        TGBOT["Telegram Bot\n[Python, aiogram]\nWebSocket relay\nto Nanobot"]
     end
 
     Student -->|"Opens app (browser)\nHTTP :42002"| CADDY
     Developer -->|"Swagger UI"| CADDY
-    CADDY -->|"Serves static files\n(React SPA)"| Student
+    Student -->|"Telegram"| TGBOT
+    CADDY -->|"Serves static files\n(React SPA, Flutter)"| Student
     CADDY -->|"Reverse proxy\nAPI requests"| API
+    CADDY -->|"WebSocket\n/ws/chat"| NANOBOT
     API -->|"Async SQL\n(SQLAlchemy)"| DB
+    NANOBOT -->|"curl\n(LMS skill)"| API
+    TGBOT -->|"WebSocket\nws://nanobot:8765"| NANOBOT
     Admin -->|"HTTP :42003"| PGA
     PGA -->|SQL| DB
 ```
 
 ### Container Responsibilities
 
-| Container  | Technology                         | Responsibility                                                                                                                                                                                                                                             |
-| ---------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Caddy      | Go, Caddyfile, Node (build stage)  | Serves the React frontend as static files at `/` and reverse-proxies API paths (`/items`, `/learners`, `/interactions`, `/docs`) to FastAPI. Built via a multi-stage Dockerfile that compiles the TypeScript frontend and bundles it into the Caddy image. |
-| FastAPI    | Python, FastAPI, SQLModel, Uvicorn | REST API: handles all business logic, validates Bearer token on every request, and exposes auto-generated Swagger UI at `/docs`.                                                                                                                           |
-| PostgreSQL | PostgreSQL                         | Relational database: stores the `item`, `learner`, and `interacts` tables. Initialised with schema and seed data from `init.sql` on first startup.                                                                                                         |
-| pgAdmin    | pgAdmin 4                          | Web-based database management UI: lets admins inspect tables, run SQL queries, and browse the data.                                                                                                                                                        |
+| Container     | Technology                         | Responsibility                                                                                                                                                                                                                                             |
+| ------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Caddy         | Go, Caddyfile, Node (build stage)  | Serves the React frontend as static files at `/` and reverse-proxies API paths (`/items`, `/learners`, `/interactions`, `/docs`) to FastAPI. Built via a multi-stage Dockerfile that compiles the TypeScript frontend and bundles it into the Caddy image. |
+| FastAPI       | Python, FastAPI, SQLModel, Uvicorn | REST API: handles all business logic, validates Bearer token on every request, and exposes auto-generated Swagger UI at `/docs`.                                                                                                                           |
+| PostgreSQL    | PostgreSQL                         | Relational database: stores the `item`, `learner`, and `interacts` tables. Initialised with schema and seed data from `init.sql` on first startup.                                                                                                         |
+| pgAdmin       | pgAdmin 4                          | Web-based database management UI: lets admins inspect tables, run SQL queries, and browse the data.                                                                                                                                                        |
+| Nanobot       | Python, nanobot-ai                 | AI agent gateway: accepts WebSocket connections on port 8765, routes messages to an LLM agent that can query the LMS backend via curl.                                                                                                                      |
+| Telegram Bot  | Python, aiogram                    | Standalone Telegram bot: handles `/start` and `/help` locally; forwards all other messages to nanobot over WebSocket. Per-user API key auth via `/login`.                                                                                                   |
 
 ---
 
@@ -350,3 +361,51 @@ sequenceDiagram
 **Decision:** The `item` table uses a self-referential `parent_id` and a `type` column to model the content hierarchy. The `attributes` column is JSONB for type-specific metadata.
 
 **Rationale:** This schema is minimal but expressive. It maps directly to the OBER entity model (Item → Outcome via `aligns`), where `type` can distinguish *promoting* from *verifying* items. JSONB attributes avoid the need to normalise type-specific fields into separate tables.
+
+---
+
+### 7.7 AI Agent — Standalone WebSocket Relay
+
+**Decision:** The Telegram bot is a standalone service that forwards messages to the nanobot AI agent over WebSocket — the same transport the Flutter web app uses. Both clients connect to `ws://nanobot:8765`.
+
+```
+Flutter app   →  WebSocket  →  nanobot  →  LLM agent
+Telegram bot  →  WebSocket  →  nanobot  →  LLM agent
+```
+
+**Rationale:** An earlier prototype ran the Telegram bot as a nanobot channel plugin. This coupled the bot to the nanobot process (no independent restarts), caused plugin name-shadowing issues, and broke env var overrides for channel config. The standalone approach gives a clean service boundary and symmetric architecture.
+
+**Discarded alternative:** Keep the bot as a nanobot channel plugin (`nanobot_telegram/`). Functional but required two nanobot instances, separate config JSON files per instance, and the `telegram_aiogram` entry-point name to avoid built-in channel shadowing. See `nanobot/plan.md` for details.
+
+---
+
+### 7.8 Structured Message Protocol
+
+**Decision:** The nanobot WebSocket protocol uses typed JSON messages so clients can render rich UI (buttons, confirmations) without parsing free text.
+
+Every server → client message has a `type` field:
+
+| Type        | Purpose                                   | Example client rendering              |
+| ----------- | ----------------------------------------- | ------------------------------------- |
+| `text`      | Formatted text (markdown or plain)        | Message bubble, split at 4096 chars   |
+| `choice`    | Pick one option from a list               | Telegram `InlineKeyboardMarkup`       |
+| `confirm`   | Yes / no question                         | Telegram Yes/No inline buttons        |
+| `composite` | Multiple parts (e.g. text + choice)       | Rendered in sequence                  |
+
+Client → server messages remain `{"content": "text"}`. Button taps send the `value` as plain content.
+
+**Backwards compatibility:** If the server response has no `type` field, clients treat it as `{"type": "text", "content": "...", "format": "markdown"}`.
+
+**Agent output:** The LLM agent can output structured JSON when instructed by `SKILL.md` (e.g. `choice` when a lab parameter is missing). If the output is not valid JSON with a `type` field, the webchat plugin wraps it as a `text` message automatically.
+
+**Rationale:** A string-only protocol forces every response into flat text. Clients like Telegram and Flutter have rich UI primitives (inline keyboards, chips, dialogs) that are unreachable without structured messages. The typed approach keeps nanobot client-agnostic — it describes *intent*, not *presentation*.
+
+---
+
+### 7.9 Per-User Authentication via WebSocket Query Parameter
+
+**Decision:** Each client passes the user's LMS API key as a query parameter when opening the WebSocket connection: `ws://nanobot:8765?api_key=SECRET`. The webchat plugin reads the key and prepends `[LMS_API_KEY=<key>]` to every message so the LLM agent can use it in curl commands. Nanobot itself has no hardcoded `LMS_API_KEY`.
+
+**Rationale:** This keeps authentication per-user rather than per-deployment. Users provide their own key via `/login <key>` (Telegram) or a login screen (Flutter). The key travels with the WebSocket connection (stateless, no handshake protocol), and the agent is instructed to never echo it back.
+
+**Discarded alternative:** Pass the key as a first-message auth handshake (`{"type": "auth", "api_key": "..."}`). Adds a mini-protocol with ordering rules and error cases for no benefit over a query parameter.
