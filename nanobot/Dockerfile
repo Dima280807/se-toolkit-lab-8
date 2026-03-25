@@ -20,7 +20,7 @@ ENV UV_PYTHON_DOWNLOADS=0
 
 WORKDIR /app
 COPY --from=workspace pyproject.toml uv.lock /app/
-COPY packages/nanobot-ai /app/nanobot-ai
+COPY packages/nanobot-ai /app/nanobot/packages/nanobot-ai
 COPY pyproject.toml /app/nanobot/pyproject.toml
 COPY --from=workspace mcp/pyproject.toml /app/mcp/pyproject.toml
 
