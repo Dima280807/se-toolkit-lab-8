@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = "==3.14.*"
 dependencies = [
     "mcp-lms",
+    "mcp-obs",
     "mcp-webchat",
     "nanobot-ai",
     "nanobot-webchat",
@@ -16,3 +17,4 @@ nanobot-ai = { url = "https://github.com/HKUDS/nanobot/archive/e7d371ec1e6531b28
 mcp-lms = { workspace = true }
 nanobot-webchat = { workspace = true }
 mcp-webchat = { workspace = true }
+mcp-obs = { workspace = true }
