@@ -53,6 +53,7 @@
                       --offline \
                       --no-progress \
                       --exclude-path '.venv' \
+                      --exclude-path '.uv-cache' \
                       --exclude-path '.direnv' \
                       --exclude-path 'node_modules' \
                       --exclude-path 'tmp' \
