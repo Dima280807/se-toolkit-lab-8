@@ -17,6 +17,38 @@ Use observability MCP tools to answer questions about system health, errors, and
 
 ## Strategy
 
+### When the user asks "What went wrong?" or "Check system health":
+
+**Execute a one-shot investigation in this order:**
+
+1. **Call `logs_error_count`** with a fresh recent window (2-10 minutes)
+   - Use `service="Learning Management Service"` for LMS queries
+   - This tells you if there are recent errors to investigate
+
+2. **Call `logs_search`** scoped to the failing service
+   - Query: `_time:10m service.name:"Learning Management Service" severity:ERROR`
+   - Look for `trace_id` in the error log output
+   - Note the error message and timestamp
+
+3. **Call `traces_get`** with the trace_id from logs
+   - This shows the full span hierarchy
+   - Identify which operation failed and why
+
+4. **Summarize findings in one coherent response:**
+   - Start with the conclusion: what failed
+   - Cite log evidence: timestamp, error message
+   - Cite trace evidence: which span failed, operation name
+   - Name the affected service and root failing operation
+   - Do NOT dump raw JSON — synthesize the findings
+
+### Investigation checklist for "What went wrong?":
+
+Your response should always include:
+- [ ] Log evidence: at least one error log with timestamp and message
+- [ ] Trace evidence: the trace_id and which span/operation failed
+- [ ] Root cause: name the failing service and operation (e.g., "PostgreSQL connection refused during db_query")
+- [ ] Impact: what user-facing operation was affected (e.g., "GET /items/ returned error")
+
 ### When the user asks about errors or system health:
 
 1. **Start with `logs_error_count`** to see if there are recent errors
