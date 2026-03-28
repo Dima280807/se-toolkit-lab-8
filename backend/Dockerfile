@@ -23,12 +23,12 @@ COPY --from=workspace pyproject.toml uv.lock /app/
 COPY pyproject.toml /app/backend/pyproject.toml
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-workspace --package lms-backend
+    uv sync --no-install-workspace --package lms-backend
 
 COPY . /app/backend
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --package lms-backend
+    uv sync --package lms-backend
 
 # ---
 # Stage 2: use a final image without uv
